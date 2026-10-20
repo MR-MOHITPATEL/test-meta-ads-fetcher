@@ -149,6 +149,36 @@ def fetch_platform():
     })
 
 
+@app.route('/fetch-platform-sync', methods=['GET', 'POST'])
+def fetch_platform_sync():
+    """Synchronous version — waits for completion."""
+    if not check_auth():
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    account_idx = request.args.get('account', type=int)
+
+    if account_idx is not None and (account_idx < 1 or account_idx > 3):
+        return jsonify({'error': 'account must be 1, 2, or 3'}), 400
+
+    try:
+        client = get_gspread_client()
+        spreadsheet = get_spreadsheet(client)
+
+        accounts = [ACCOUNTS[account_idx - 1]] if account_idx else ACCOUNTS
+
+        results = []
+        for acc in accounts:
+            rpa = acc.get('real_purchase_action', '')
+            for lv in ['campaign', 'adset']:
+                data = fetch_platform_insights(acc, lv)
+                write_platform_data(spreadsheet, acc['name'], lv, data, rpa)
+                results.append({'account': acc['name'], 'level': lv, 'rows': len(data)})
+
+        return jsonify({'status': 'done', 'results': results})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
